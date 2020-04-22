@@ -149,53 +149,45 @@ This transaction that protects Alice is called Commitment transaction and we wil
 
 ==== Commitment Transaction
 
-You have just learnt that a payment channel needs to be opened by preparing a funding transaction which sends the funds of the payment channel to a 2-out-of-2 multisignature address.
+You have just learnt that a payment channel needs to be opened by preparing a funding transaction which sends the capacity of the payment channel to a 2-2 multisignature address.
 From the example in the last section you learnt that more ingredients are necessary to open and operate a payment channel that does not rely on trusting the channel partner.
 These ingredients are the commitment transactions.
-They are used to make sure that everyone connected to a channel is able to get its own funds back in case the channel partner becomes unresponsive or, even worse, if the channel partner deliberately or by accident tries to cheat during the execution of the protocol.
+They are used to make sure that everyone on the channel is able to get their own funds back in case the channel partner becomes unresponsive or, even worse, if the channel partner deliberately or by accident tries to cheat with the execution of the protocol.
 The commitment transactions also encode the balance of the payment channel.
-The balance of the payment channel is an agreement by the channel partners about how the funds, i.e. capacity, are split among the partners.
+The balance of the payment channel is an agreement of the channel partners about how the capacity is split among the partners.
 Let us assume Alice opens a channel with a capacity of 10 mBTC with Bob.
-Naturally, initially Alice should still be in the possession of the 10 mBTC.
+Naturally one would assume that Alice should still be in the possession of the 10 mBTC.
 This can actually be easily achieved with the following construction:
 
 . Alice creates a new private / public key pair and informs Bob that she wishes to open a channel via the `open_channel` message.
 . Bob also creates a new private / public key pair and agrees to accept a channel from Alice while sending his public key to Alice via the `accept_channel` message.
 . Alice now creates a funding transaction from her wallet that sends 10 mBTC to the multisignature address with a locking script `2 <Public Key A> <Public Key B> 2 CHECKMULTISIG`.
 . Alice does not broadcast the funding transaction but informs Bob about the transaction id of the funding transaction by sending a `funding_created` message.
-. Both Alice and Bob create their version of a commitment transaction. This transaction will spend from the funding transaction and send all the bitcoin back to an address controlled by Alice.
+. Both Alice and Bob create their version of a commitment transaction. This Transaction will spend from the funding transaction and send all the bitcoin back to an address controlled by Alice.
 . Alice provides a signature for Bob's Commitment Transaction. This signature was already included in the `funding_created` message.
 . Bob provides a signature for Alice's Commitment Transaction and sends this back to Alice via the `funding_signed` message.
 . Only after signatures have been exchanged Alice will broadcast the funding transaction to the Bitcoin network.
 
-By following this protocol Alice did not give up ownership of her 10 mBTC even though the funds have been sent to a 2-out-of-2 multisignature address for which Alice controls only one key.
+With this protocol Alice did not give up ownership of her 10 mBTC even though the funds have been sent to a 2-2 multisignature wallet for which Alice controls only one key.
 If Bob stops responding to Alice she will be able to broadcast her commitment transaction and receive her funds back.
 She will only have lost the fees for the two on-chain transactions.
 As long as she follows the protocol and has her node secured this is her only risk when opening a channel.
 
-At channel opening time, the commitment transactions serve the purpose of allowing Alice to withdraw her funds directly after opening the channel in case Bob does not answer. However, commitment transactions are created each time the channel balance changes. In other words, each time bitcoin is sent between Alice and Bob new commitment transactions are created. Each commitment transaction encodes the latest balance between Alice and Bob.
-If Alice wanted to send 3 mBTC to Bob to pay him for a service he offered, both would create a new version of their commitment transactions which would now send 7mBTC to Alice and 3 mBTC to Bob and share signatures with each other.
-However, there is still a piece missing in the design presented so far.
+The commitment transactions will not only serve the purpose of allowing Alice to withdraw her funds directly after opening the channel in case Bob does not answer.
+More commitment transactions are created during the lifetime of the channel to encode the balance between Alice and Bob.
+If Alice wanted to send 3 mBTC to Bob to pay him for a service he offered, both would create a new version of their commitment transaction which would now send 7mBTC to Alice and 3 mBTC to Bob and share signatures with each other.
+However you will probably have realized that there is a major flaw with this particular design.
 
 **Do you see any way how Alice could cheat on Bob?**
 
-How many commitment transactions does Alice hold after her payment of 3mBTC to Bob? She holds two, the original one giving her 10 mBTC and the last one giving her 7mBTC. As you see, in the design presented so far nothing could stop Alice from publishing an old or even initial commitment transaction. A crooked Alice could publish the commitment transaction which grants her 10 mBTC.
+We hope you recognize that with the so far described system nothing could stop Alice from publishing her old or even initial commitment transaction which grants her 10 mBTC.
 Since that commitment transaction has previously been signed by Bob he can't prevent Alice from doing so.
-A smarter mechanism is needed to prevent Alice from publishing an old commitment transaction. 
-Let us now find out how this can be achieved and how an improved mechanism enables the Lightning Network to operate without trust.
+Obviously Alice could tell Bob that she has deleted the old commitment transaction but as we mentioned several times the Lightning Network does operate without trust so a smarter mechanism is needed to prevent Alice from publishing an old commitment transaction.
 As Bitcoin is censorship resistant no one can prevent a participant from the Lightning Network to publish an old commitment transaction.
-Imagine, the commitment transactions can be slightly modified so that publishing an outdated commitment transaction can be punished. 
-A high punishment will discourage cheating.
-The penalty for broadcasting an old commitment transaction is to give the cheated channel partner the ability to claim the funds that belonged to the cheater, i.e. the broadcaster of the outdated transaction.
-With this modification in in place, let us go through this scenario again. 
-Alice creates a channel with Bob and put 10 mBTC into it. 
-Alice send 3 mBTC to Bob. 
-Alice now tries to cheat Bob out of his earned 3 mBTC by publishing an old commitment transaction claiming the original 10 mBTC for herself. 
-With the modification, Bob can now detect the fraud and he is enabled to punish Alice for the fraud by claiming the full 10 mBTC for himself. 
-Bob ends up with 10 mBTC gaining 7 mBTC for catching Alice cheat. 
-Alice ends up with 0 mBTC. 
-For cheating she lost the 7 mBTC she still had. 
-With such a strong penalty mechanism in place Alice will not be tempted to cheat by publishing an old state as she would almost always loose all her remaining funds in the channel.
+However the commitment transactions can be slightly modified so that publishing an outdated commitment transaction is discouraged by a rather high punishment.
+The penalty for broadcasting an old commitment transaction is to give the other channel partner the ability to claim the funds that belonged to the broadcaster of the transaction.
+This means that Bob would have the ability to claim 10 mBTC from the output that belonged to Alice in her original Commitment transaction if she publishes it after she has agreed to a second commitment transaction in which she would only own 7 mBTC and Bob would own 3 mBTC.
+With such a strong penalty mechanism in place Alice should never purposely publish an old state as she would almost always lose her remaining funds in the channel.
 
 [Note]
 ====
@@ -205,40 +197,34 @@ A key characteristic of bitcoin is that once a transaction is valid, it remains 
 
 We will now see how such a penalty mechanism can be included to the above construction of the commitment transactions.
 Usually the commitment transaction has at least two outputs, one for each partner.
-As new addition, a channel partner will encumber their own output with a timelock and a revocation secret.
-The timelock prevents the owner of the output to spend it immediately once the commitment transaction was included in a block.
-The timelock is usually measured in blocktime and can be up to 2016.
-On average, 2016 blocks represent or last two weeks (assuming a blocktime of 10 minutes as in the Bitcoin network).
-Within the timelock anyone who knows the revocation secret can spend the output even before the timelock is over.
-Alice and Bob know only one half each of the revocation secret.
-But if they share their half with the other channel partner, theh the other partner knows the full secret.
+However a channel partner will encumber their own output with a timelock and a revocation secret.
+The timelock prevents the owner of the output to spend it directly once the commitment transaction was included in a block.
+The timelock is usually measured in blocktime and can be up to 2016 which is statistically speaking two weeks (assuming a blocktime of 10 minutes which is the target for the Bitcoin network).
+Within the timelock anyone who knows the revocation secret can spend the output even well before the timelock was over.
+Alice and Bob know only one half of the revocation secret but if they share their half with the other party, the other party knows the full secret.
 In order to update the balance and receive a signature from Bob, Alice will have to share her half of the revocation secret of the current commitment transaction with Bob.
 
-Obviously, for every new update of the channel balance new revocation secrets have to be created and saved. 
-As long as a channel remains open, all revocation secrets ever created for this specific channel need to be keep as they might be needed in the future.
-Luckily, the secrets are rather small and it is only the channel partners who need to keep them, not the entire network.
-Nevertheless, managing and storing the revocation secrets is one of the more elaborate parts of Lightning nodes that require node operators to maintain backups.
-Other technologies such as Watchtower services or switching to the aforementioned "eltoo" channels might be future strategies to mitigate these issues.
+Obviously for every new update of the channel balance new revocation secrets have to be created and the old ones all need to be saved.
+Luckily the secrets are rather small and it is only the channel partners who need to do that, not the entire network.
+Still managing the revocation secrets is one of the more tricky parts of Lightning nodes that hinders node operators to maintain backups.
+Watchtower services or switching to the aforementioned eltoo channels might be future strategies to mitigate these problems.
 
-With the timelocks in place Alice can close the channel at any time if Bob does not respond, claiming her fair share of the balance.
-After publishing the commitment transaction "on-chain" Alice has to wait for the time lock to expire before she can spend her funds from the commitment transaction.
-Other than that and the "on-chain" fees for opening and closing a channel there comes no additional burden with maintaining a payment channel.
+With the timelocks in place Alice can close the channel at any time if Bob does not respond.
+She has to wait for the time lock until she can spend her funds from the commitment transaction after the commitment transaction has a confirmation.
+Other than that and the fees for opening and closing a channel there comes no additional burden with maintaining a payment channel.
 
 ==== Announcing the channel
-Channel partners can optionally agree to publicly announce the channel over the gossip protocol that comes with the Lightning Network. Such a channel is called a "public" channel. 
-On the contrary, a channel that is not publicly announced is referred to as a "private" channel and its details are only known to the two channel partners. 
-Announcing channels publicly is useful as other nodes will then be able to utilize the announced channel to route payments via it to other participants of the network.
-Note that even for private channels, the funding transaction is always publicly stored in the Bitcoin blockchain.
-However, as it is just a regular transaction to a 2-out-of-2 multisignature address, participants of the Bitcoin network do not know if this particular transaction is used to maintain a payment channel. 
-In short, the "on-chain" transactions of the Lightning Network are indistinguishable from other Bitcoin transactions. 
-Private channels can still be used in routing payments but only by the subset of nodes which are aware of their existence.
-If a channel and its capacity are publicly announced on the gossip protocol, the channel partners will also be able to announce some meta data about the channel.
-This meta data includes the routing fees a node charges to forward payments on that channel as well as information about what kind and how many Hash Time-Locked Contracts (HTLCs) will be accepted.
+Channel partners can agree to publicly announce the channel over the gossip protocol that comes with the Lightning Network.
+This is useful as other nodes will then be able to utilize this channel to route payments to other participants of the network.
+Note that even for private channels which are not announced over the gossip protocol, the funding transaction is always publicly stored in the Bitcoin blockchain.
+However as it is just a regular transaction to a 2-2 multisignature address, participants of the Bitcoin network do not know if this particular transaction is used to maintain a payment channel.
+Private channel can still be used in routing payments but only by the subset of nodes which are aware of their existence.
+If a channel and its capacity is publicly announced on the gossip protocol, the channel partners will also be able to announce some meta data about the channel.
+This meta data includes the routing fees a node charges to forward payments on that channel, information about what kind and how many Hash Time-Locked Contracts (HTLCs) will be accepted.
 As we have not discussed HTLCs yet we will just mention that they are additional conditional outputs in the commitment transactions used for routing payments and for updating the channel balance.
 We will later investigate HTLCs in more detail.
-When new participants join the Lightning Network they will be able to collect the information propagated via the gossip protocol from their peers.
-Peers can only omit messages.
-Peers cannot falsify messages to trick other participants as every message is cryptographically signed by the publishing node that created the message.
+When new participants join the Lightning Network they will be able to download the information propagated via the gossip protocol from their peers.
+Peers can only omit messages but as every message is signed by the node that originally sent out the message the information on the gossip protocol cannot be modified to trick other participants.
 
 ==== Closing the channel
 The main goal of people using the Lightning Network is to keep their channels open as long as possible.
@@ -319,40 +305,40 @@ The payee will choose a truly random number `r` and produces the `sha256` of tha
 Note that an adversary should have no means of guessing or predicting `r`.
 Using a customer id or the hash of entries of the shopping cart together with a timestamp is not truly random and yields a security risk.
 The payment process of the Lightning Network is only secure if `r` is chosen completely randomly and is not predictable and as long as the Hash function cannot be inverted.
-We note that this is not an additional security assumption for Bitcoin as the security of the Hash function is currently the underlying basis of Bitcoin mining.
+We note that this is not an additional security assumption for Bitcoin as the security of the Hash function is currently what Bitcoin mining is built upon.
 
 ==== Additional Meta Data
 Invoices can encode some other useful meta data.
 For example a short description.
-In case a user has several invoices to pay, the user can read the description and be reminded what the invoice is about.
+In case a user has several invoices to pay, the user can read the description and make sure what the invoice was about.
 As payment channels do not need to be publicly announced, the payee can also provide some private channels as routing hints to the invoice.
-These hints can furthermore be used to suggest public channels, e.g. those channels on which the payee has enough inbound liquidity to actually receive the amount.
-In case the payer's Lightning node is not able to send the payment over the Lightning Network, invoices can optionally include an on-chain Bitcoin fallback address.
-We would however always recommend to open a new Lightning payment channel instead of doing an on-chain Bitcoin payment.
+These hints can also be used for public channels to point to those channels on which the payee has enough inbound liquidity to actually receive the amount.
+In case the payer's Lightning node is not able to send the payment over the Lightning Network, invoices can also include a fallback address.
+We would however always recommend to open a new payment channel instead of doing an on-chain transaction that does not add an additional payment channel.
 Invoices also have an expiry time so that the payee can delete the preimage after some time to free up space.
 
 === Delivering the payment
 
 You have already learnt that payments start with the payee creating an invoice which includes a Payment Hash to make sure that payments are atomic and that no one on the path of payment channels can withhold the transferred money to their benefit.
-In this section we will dive into the ideas and methods that are being used to deliver a payment over the Lightning Network and utilize everything that we have presented so far.
+In this section we will dive into the ideas and methods that are being used to deliver a payment over the Lightning Network and utilize everything that we have used so far.
 We need to introduce one missing protocol of the Lightning Network which is the gossip protocol.
 
-==== The peer-to-peer gossip protocol
+==== The peer 2 peer gossip protocol
 
 As mentioned payment channels can be announced to the network after they are established.
-This is happening via a peer-to-peer gossip protocol.
+This is happening via a peer to peer gossip protocol.
 After opening a channel a node will send out an announcement of the channel via the `channel_announcement` message to its peers.
 Every peer can validate the information from the `channel_announcement` message and verify that the funding transaction was indeed confirmed by the Bitcoin network.
 Upon verification the node will forward the gossip message to its peers.
-In order to avoid spam this will only be done if the message was not forwarded by that node already.
+In order to avoid spam this will of course only be done if the message was not forwarded by that node yet.
 Similarly nodes can be announced via the gossip protocol with the `node_announcment` message.
 For this message to be forwarded a node has to have at least one public channel that was announced on the gossip protocol.
-This again is a spam reduction measure of the gossip protocol.
-Payment channels have various meta data that are useful for other participants of the network.
+This again is a spam measure of the gossip protocol.
+Payment channels have various meta data that are useful for other participants of the network to know.
 This meta data is mainly used for making routing decisions.
-As nodes might want to change the meta data of their channel occasionally this information is shared in a `channel_update` message.
-These messages will only be forwarded about four times a day for every channel to prevent spam.
-The gossip protocol also comes with a variety of queries and tools to initially synchronize a node with the view of the network or to update the node's view after being offline for a while.
+As nodes might want to change the meta data of their channel once in a while this information is shared in a `channel_update` message.
+These messages will only be forwarded about 4 times per day for every channel to prevent spam.
+The gossip protocol also comes with a variety of queries and tools to initially synchronize a node with the view of the network or to update the nodes view after being offline for a while.
 We will investigate the details of the gossip protocol in a later chapter.
 For now it is only important to know that it exists and that it is used to share topology information of the Lightning Network with its participants.
 This topology information is crucually needed for delivering payments through the network of payment channels.
@@ -360,13 +346,12 @@ This topology information is crucually needed for delivering payments through th
 [NOTE]
 ====
 A major challenge for the participants of the Lightning Network is that the topology information that is being shared by the gossip protocol is only partial.
-For example, the capacity of the payment channels is shared on the gossip protocol via the `channel_announcement` message.
-However, this information is not as useful as the actual distribution of the capacity into the local balance between the two channel partners.
-A node can only forward the amount of bitcoin via a particular payment channel that it actually owns within that channel.
-While Lightning could have been designed to share balance information of channels and a precise topology, this has not been done for several reasons:
+For example the capacity of the payment channels is shared on the gossip protocol via the `channel_announcement` message.
+However this information is not as useful as the actual distribution of the capacity into a local balance between the two channel partners.
+This is obvious as a node can only forward the amount of bitcoin via a particular payment channel that it actually owns within that channel.
+While Lightning could have been designed to share balance information of channels and a precise topology this has not been done for two reasons:
 1. To protect the privacy of the users and not shout out every financial transaction and payment that is being conducted.
-2. To be able to scale the amount of payments that can be conducted with the Lightning Network. Remember that the Lightning Network was created in the first place because notifying every participant about every payment does not scale well. Thus for simple technical reasons the Lightning Network cannot be designed in a way that the current balance updates of channels are being shared among participants.
-3. The Lightning Network is a dynamic organism. It changes constantly and frequently. Nodes are being added, other nodes are being turned off, balances change, etc. Even if everything is always communicated, the information will be valid only for a short amount of time. As a matter of fact, information might be already outdated by the time it is received. 
+2. To be able to scale the amount of payments that can be conducted with the Lightning Network. Remember the Lightning Network was created in the first place because notifying every participant about every payment does not scale well. Thus for simple technical reasons the Lightning Network cannot be designed in a way that the current balance updates of channels are being shared among participants.
 ====
 
 ==== Finding a path
@@ -451,7 +436,7 @@ Since Bob can directly close the channel, which costs fees paid by Alice, she wi
 
 === Comparison with Bitcoin
 
-While the Lightning Network is built on top of Bitcoin, and inherits many of its features and properties, there are important differences that users of both need to be aware of.
+While the Lightning Network is built on top of Bitcoin and inherits many of its features and properties, there are important differences that users of both networks need to be aware of.
 
 ==== Selecting Outputs vs Finding a Path
 
@@ -466,35 +451,41 @@ As many paths may exist, the choice of path to the Lightning Network payer is so
 ==== Change Outputs on Bitcoin vs No Change on Lightning
 
 In order to make a payment on the Bitcoin network, a sender needs to consume one or more Unspent Transaction Outputs (UTXOs).
-The entire UTXO needs to be spent, so if a user wishes to spend 0.8 BTC, but only has a 1 BTC UTXO, then they need to send 0.8 BTC to the receiver, and 0.2 BTC back to themselves.
+The entire UTXO needs to be spent, so if a user wishes to spend 0.8 BTC, but only has a 1 BTC UTXO, then they need to send 0.8 BTC to the receiver, and 0.2 BTC back to themselves as change.
 This 0.2 BTC creates a new UTXO called a 'change output'.
 
 On Lightning, the UTXO is consumed during the Funding Transaction, which leads to the creation of a channel.
 Once the bitcoin is locked within that channel, portions of it can be sent back and forth within the channel, without the need to create any change.
-This is because the channel partners simply update the channel balance, and only create a new UTXO when the channel is eventually closed using the Bitcoin network.
+This is because the channel partners simply update the channel balance and only create a new UTXO when the channel is eventually closed using the Bitcoin network.
 
 ==== Mining Fees vs Routing Fees
 
 On the Bitcoin network, users pay fees to miners to have their transactions included in a block.
-These fees are paid to the miners who mine that particular block, and are based on the _size_ of the transaction in _bytes_ that the transaction is using in a block, as well as how quickly the user wants that transaction mined.
+These fees are paid to the miner who mines that particular block.
+The amount of the fee is based on the _size_ of the transaction in _bytes_ that the transaction is using in a block, as well as how quickly the user wants that transaction mined.
 As miners will typically mine the most profitable transactions first, a user who wants their transaction mined immediately will pay a _higher_ fee-per-byte, while a user who is not in a hurry will pay a _lower_ fee-per-byte.
 
 On the Lightning Network, users pay fees to other users to route payments through their channels.
 In order to route a payment, a routing user will have to move the funds in two or more channels they own, as well as transmit the data for the sender's payment.
-Typically, the routing user will charge the sender based on the _value_ of the payment, as well as setting their own fees they require to route the payment.
-Higher value payments will thus cost more to route, and a market for capacity will exist, where different users will charge different fees for routing through their channels.
+Typically, the routing user will charge the sender based on the _value_ of the payment, as well as setting their own fees they established to route the payment.
+Higher value payments will thus cost more to route, and a market for capacity will exist where different users will charge different fees for routing through their channels.
 
 ==== Varying Fees Depending Traffic vs Announced Fees
 
-On the Bitcoin network, miners are profit-seeking, and so will typically include as many transactions in a block as possible, while staying within the block size limit (actually, a modified form called the block weight limit).
+On the Bitcoin network, miners are profit-seeking and will typically include as many transactions in a block as possible, while staying within the block size limit (actually, a modified form called the block weight limit).
 If there are more transactions in the queue (called the mempool) than can fit in a block, they will begin by mining the transactions that pay the highest fees per byte (highest fee per weight).
 Thus, if there are many transactions in the queue, users will have to pay a higher fee to be included in the next block, or they will have to wait until there are fewer transactions in the queue.
-This naturally leads to the concept of 'traffic' and the creation of a fee market where users pay based on how urgently they need their transaction included in the next block.
+This naturally leads to the creation of a fee market where users pay based on how urgently they need their transaction included in the next block. 
 
-On the Lightning Network, traffic does not exist since users are not competing for block space outside of the Funding or Closing transactions.
-Instead, they are paying fees to the users routing their payments, and different routers will charge different fees for routing through their channels.
+The scarce resource on the Bitcoin network is the space in the blocks. Bitcoin users compete for block space. And the Bitcoin fee market is based on available block space. The scarce resource in the Lightning netowrk is the capacities on the channels and channel connectivity. Lightning users compete for capacity and connectivity. The Lightning fee market is driven by capacity and connectivity. 
+
+On the Lightning Network, users are paying fees to the users routing their payments. Routing a payment in economic terms is nothing else than providing and assigning capacity to the payer. 
+Different routers will charge different fees for routing through their channels.
 Naturally, routers who are charging lower fees for the same capacity will be more attractive to route through.
-Thus a fee market exists where routers are in competition with each other over the fees they charge to route payments through their channels.
+Thus a fee market exists where routers are in competition with each other over the fees they charge to route payments through their channels. 
+Following general economic principles, the more capacity and connectivity is provided the more competition there will be and as a result the lower the fees will be. 
+
+The growth of the Lightning Network might lead to lower Lightning fees, while the growth in the Bitcoin Network likely leads to higher Bitcoin fees.
 
 ==== Public Transactions on the Blockchain vs Secret payments
 
