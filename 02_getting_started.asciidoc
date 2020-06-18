@@ -80,7 +80,7 @@ In <<lnwallet-examples>> we see some examples of currently popular Lightning nod
 
 // TODO: Add a lot more wallet/node examples, confirm the details for correctness
 [[lnwallet-examples]]
-.Examples of Popular LN Wallets
+.Examples of Popular Lightning Wallets
 [options="header"]
 |===
 | Application    | Device  | LN Node     | Bitcoin Node          | Keystore
@@ -102,7 +102,7 @@ When selecting a wallet, keep in mind that even if you don't see these trade-off
 
 In the next section, we will return to our first user and walk through her first Lightning wallet setup. She has chosen a wallet that is more sophisticated than the easier custodial wallets. This allows us to show some of the underlying complexity and introduce some of the inner workings of an advanced wallet during our example. You may find that your first ideal wallet is further towards "ease of use", by accepting some of the control and privacy trade-offs. Or perhaps you are more of a "power user" and want to run your own LN and Bitcoin nodes as part of your wallet solution.
 
-=== Alice's First LN Wallet
+=== Alice's First Lightning Wallet
 
 Alice is a long time Bitcoin user. We first met Alice in Chapter 1 of _"Mastering Bitcoin"_ footnote:["Mastering Bitcoin 2nd Edition, Chapter 1" Andreas M. Antonopoulos (https://github.com/bitcoinbook/bitcoinbook/blob/develop/ch01.asciidoc).], when she bought a cup of coffee from Bob's cafe using a bitcoin transaction. Now, Alice is eager to learn about and experiment with the Lightning Network. First, she has to select a Lightning wallet that meets her needs.
 
